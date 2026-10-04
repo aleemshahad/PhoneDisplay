@@ -23,12 +23,15 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Publish self-contained single file
-        run: >
-          dotnet publish server/PhoneDisplay.Server.csproj
-          -c Release
-          -r win-x64
-          --self-contained true
-          -o artifacts/windows
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build-logs | Out-Null
+          dotnet publish server/PhoneDisplay.Server.csproj -c Release -r win-x64 --self-contained true -o artifacts/windows *>&1 |
+            Tee-Object -FilePath build-logs/windows-publish.txt
+          $code = $LASTEXITCODE
+          "" | Add-Content build-logs/windows-publish.txt
+          "exit_code=$code" | Add-Content build-logs/windows-publish.txt
+          if ($code -ne 0) { exit $code }
 
       - name: Verify executable exists
         shell: pwsh
@@ -50,6 +53,11 @@ jobs:
           path: PhoneDisplay-Windows-x64.zip
           if-no-files-found: error
 
+      - name: Commit build logs
+        if: always()
+        shell: pwsh
+        run: ./tools/publish-logs.ps1 -Prefix windows
+
   android:
     name: Android player (.apk)
     runs-on: windows-latest
@@ -61,7 +69,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
+      - name: Verify Android SDK
+        shell: pwsh
+        run: |
+          "ANDROID_HOME = $env:ANDROID_HOME"
+          if (-not $env:ANDROID_HOME) { throw "Android SDK not found on the runner image" }
 
       - name: Install Gradle 8.9
         shell: pwsh
@@ -70,7 +82,8 @@ jobs:
           Invoke-WebRequest -Uri "https://services.gradle.org/distributions/gradle-8.9-bin.zip" -OutFile $zip
           Expand-Archive -Path $zip -DestinationPath "$env:RUNNER_TEMP/gradle"
           $bin = "$env:RUNNER_TEMP/gradle/gradle-8.9/bin"
-          if ($bin) { Add-Content -Path $env:GITHUB_PATH -Value $bin }
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
+          Add-Content -Path $env:GITHUB_ENV -Value "GRADLE_BIN=$bin"
           & "$bin/gradle.bat" --version
 
       - name: Copy web client into app assets
@@ -83,9 +96,13 @@ jobs:
       - name: Build release APK
         shell: pwsh
         run: |
-          $gradle = "$env:RUNNER_TEMP/gradle/gradle-8.9/bin/gradle.bat"
-          & $gradle --no-daemon --stacktrace -p android assembleRelease
-          if ($LASTEXITCODE -ne 0) { throw "Gradle build failed" }
+          New-Item -ItemType Directory -Force -Path build-logs | Out-Null
+          & "$env:GRADLE_BIN/gradle.bat" --no-daemon --stacktrace -p android assembleRelease *>&1 |
+            Tee-Object -FilePath build-logs/android-gradle.txt
+          $code = $LASTEXITCODE
+          "" | Add-Content build-logs/android-gradle.txt
+          "exit_code=$code" | Add-Content build-logs/android-gradle.txt
+          if ($code -ne 0) { exit $code }
 
       - name: Verify APK exists
         shell: pwsh
@@ -93,6 +110,7 @@ jobs:
           $apk = Get-ChildItem "android/app/build/outputs/apk/release/*.apk" | Select-Object -First 1
           if (-not $apk) { throw "Build did not produce an APK" }
           "OK: $($apk.Name) $($apk.Length) bytes"
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           Copy-Item $apk.FullName "artifacts/PhoneDisplay.apk" -Force
 
       - uses: actions/upload-artifact@v4
@@ -100,6 +118,11 @@ jobs:
           name: PhoneDisplay-Android
           path: artifacts/PhoneDisplay.apk
           if-no-files-found: error
+
+      - name: Commit build logs
+        if: always()
+        shell: pwsh
+        run: ./tools/publish-logs.ps1 -Prefix android
 
   release:
     name: GitHub release

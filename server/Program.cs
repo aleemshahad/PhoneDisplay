@@ -1,8 +1,6 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
-using System.Reflection;
 using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -56,87 +54,88 @@ catch (Exception ex)
     return;
 }
 
-using (capture)
+var broadcaster = new Broadcaster();
+var shutdown = new CancellationTokenSource();
+var startedAt = DateTime.UtcNow;
+
+Console.CancelKeyPress += (_, eventArgs) =>
 {
-    var broadcaster = new Broadcaster();
-    var shutdown = new CancellationTokenSource();
+    eventArgs.Cancel = true;
+    shutdown.Cancel();
+};
 
-    Console.CancelKeyPress += (_, eventArgs) =>
-    {
-        eventArgs.Cancel = true;
-        shutdown.Cancel();
-    };
+var captureLoop = RunCaptureLoopAsync(capture, broadcaster, options.Fps, shutdown.Token);
 
-    var captureLoop = RunCaptureLoopAsync(capture, broadcaster, options.Fps, shutdown.Token);
+var builder = WebApplication.CreateBuilder();
+builder.Logging.ClearProviders();
+builder.WebHost.UseUrls($"http://0.0.0.0:{options.Port}");
 
-    var builder = WebApplication.CreateBuilder();
-    builder.Logging.ClearProviders();
-    builder.WebHost.UseUrls($"http://0.0.0.0:{options.Port}");
+var app = builder.Build();
 
-    var app = builder.Build();
-    var startedAt = DateTime.UtcNow;
+app.MapGet("/", () => Results.Content(ReadAsset("www/index.html"), "text/html; charset=utf-8"));
+app.MapGet("/player.css", () => Results.Content(ReadAsset("www/player.css"), "text/css; charset=utf-8"));
+app.MapGet("/player.js", () => Results.Content(ReadAsset("www/player.js"), "application/javascript; charset=utf-8"));
+app.MapGet("/health", () => Results.Text("ok"));
 
-    app.MapGet("/", () => Results.Content(ReadAsset("www/index.html"), "text/html; charset=utf-8"));
-    app.MapGet("/player.css", () => Results.Content(ReadAsset("www/player.css"), "text/css; charset=utf-8"));
-    app.MapGet("/player.js", () => Results.Content(ReadAsset("www/player.js"), "application/javascript; charset=utf-8"));
-    app.MapGet("/health", () => Results.Text("ok"));
-    app.MapGet("/api/displays", () => Results.Json(displays.Select(d => new
-    {
-        d.Index,
-        d.DeviceName,
-        d.FriendlyName,
-        d.X,
-        d.Y,
-        d.Width,
-        d.Height,
-        d.IsPrimary,
-        Selected = d.Index == target.Index
-    })));
-    app.MapGet("/api/status", () => Results.Json(new
-    {
-        display = target.ToString(),
-        width = target.Width,
-        height = target.Height,
-        fps = options.Fps,
-        quality = options.Quality,
-        clients = broadcaster.ClientCount,
-        frames = broadcaster.FramesPublished,
-        dropped = broadcaster.FramesDropped,
-        uptimeSeconds = (int)(DateTime.UtcNow - startedAt).TotalSeconds
-    }));
-    app.Map("/mjpeg", HandleMjpegAsync);
-    app.Map("/ws", HandleWebSocketAsync);
+app.MapGet("/api/displays", () => Results.Json(displays.Select(d => new
+{
+    d.Index,
+    d.DeviceName,
+    d.FriendlyName,
+    d.X,
+    d.Y,
+    d.Width,
+    d.Height,
+    d.IsPrimary,
+    Selected = d.Index == target.Index
+})));
 
-    await app.StartAsync();
+app.MapGet("/api/status", () => Results.Json(new
+{
+    display = target.ToString(),
+    width = target.Width,
+    height = target.Height,
+    fps = options.Fps,
+    quality = options.Quality,
+    clients = broadcaster.ClientCount,
+    frames = broadcaster.FramesPublished,
+    dropped = broadcaster.FramesDropped,
+    uptimeSeconds = (int)(DateTime.UtcNow - startedAt).TotalSeconds
+}));
 
-    Console.WriteLine($"Streaming : {target.FriendlyName}  {target.Width}x{target.Height}  {options.Fps} fps  quality {options.Quality}");
-    Console.WriteLine();
-    Console.WriteLine("Open this address on the phone:");
-    foreach (var url in BuildUrls(options.Port))
-    {
-        Console.WriteLine("  " + url);
-    }
-    Console.WriteLine();
-    Console.WriteLine("WiFi  : phone and PC must be on the same network, then open the http://<PC-ip> address above.");
-    Console.WriteLine("USB   : turn on USB tethering on the phone and use the 192.168.42.x address above.");
-    Console.WriteLine("Note  : Windows Firewall must allow this app on the Private network profile.");
-    Console.WriteLine("Press Ctrl+C to stop.");
-    Console.WriteLine();
+app.Map("/mjpeg", HandleMjpegAsync);
+app.Map("/ws", HandleWebSocketAsync);
 
-    await app.WaitForShutdownAsync(shutdown.Token);
+await app.StartAsync();
 
-    broadcaster.CompleteAll();
-
-    try
-    {
-        await captureLoop;
-    }
-    catch (OperationCanceledException)
-    {
-    }
+Console.WriteLine($"Streaming : {target.FriendlyName}  {target.Width}x{target.Height}  {options.Fps} fps  quality {options.Quality}");
+Console.WriteLine();
+Console.WriteLine("Open this address on the phone:");
+foreach (var url in BuildUrls(options.Port))
+{
+    Console.WriteLine("  " + url);
 }
 
-return;
+Console.WriteLine();
+Console.WriteLine("WiFi  : phone and PC must be on the same network, then open the http://<PC-ip> address above.");
+Console.WriteLine("USB   : turn on USB tethering on the phone and use the 192.168.42.x address above.");
+Console.WriteLine("Note  : Windows Firewall must allow this app on the Private network profile.");
+Console.WriteLine("Press Ctrl+C to stop.");
+Console.WriteLine();
+
+await app.WaitForShutdownAsync(shutdown.Token);
+
+broadcaster.CompleteAll();
+
+try
+{
+    await captureLoop;
+}
+catch (OperationCanceledException)
+{
+}
+
+capture.Dispose();
 
 async Task HandleMjpegAsync(HttpContext context)
 {
