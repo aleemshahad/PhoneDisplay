@@ -78,6 +78,7 @@ app.UseWebSockets(new WebSocketOptions
 });
 
 app.MapGet("/", () => Results.Content(ReadAsset("www/index.html"), "text/html; charset=utf-8"));
+app.MapGet("/index.html", () => Results.Content(ReadAsset("www/index.html"), "text/html; charset=utf-8"));
 app.MapGet("/player.css", () => Results.Content(ReadAsset("www/player.css"), "text/css; charset=utf-8"));
 app.MapGet("/player.js", () => Results.Content(ReadAsset("www/player.js"), "application/javascript; charset=utf-8"));
 app.MapGet("/health", () => Results.Text("ok"));

@@ -76,7 +76,10 @@ PhoneDisplay.Server.exe --display 1 --fps 30 --quality 80
 It prints every reachable address:
 
 ```
-Streaming : Virtual Display  \\.\DISPLAY2  1920x1080  30 fps  quality 80
+Attached displays:
+  [0] Generic Non-PnP Monitor  \\.\DISPLAY1  1280x1024 @(0,0)
+
+Streaming : Generic Non-PnP Monitor  1280x1024  15 fps  quality 70
 
 Open this address on the phone:
   http://127.0.0.1:8090/
@@ -141,11 +144,41 @@ is set to *Duplicate* instead of *Extend*, or `--display` points at the wrong mo
 
 Raise quality: `--quality 90`. Lower resolution in Windows display settings if bandwidth is tight.
 
-**Performance tips**
+## Performance tips
 
-- `--fps 20` is plenty for reading documents and keeps bandwidth low.
-- One phone client at a time; each extra client adds encoding cost.
-- 1920×1080@30 at quality 80 is roughly 5–8 Mbit/s — comfortable on 5 GHz WiFi and on USB.
+Measured on a 1280x1024 display at quality 70:
+
+| Setting | Frame size | Bandwidth |
+|---|---|---|
+| 15 fps | ~85–125 KB | ~10–15 Mbit/s |
+| 30 fps | ~85–125 KB | ~20–30 Mbit/s |
+
+Frame size tracks how much is on screen, so a busy desktop costs more than a static document.
+
+- **Stick to `--fps 15` on WiFi.** 30 fps roughly doubles the bandwidth and needs a 5 GHz link.
+- Lower `--quality` to 55–65 to cut bandwidth by about a third; text stays readable.
+- A **1280x720** virtual monitor is the sweet spot for reading documents and code over WiFi.
+- **USB tethering has no such limit** — 30 fps at quality 80 is comfortable over the cable.
+- Run one phone client at a time; every extra client adds encoding cost.
+
+JPEG was chosen deliberately: it needs no codecs, so the build stays tiny and cannot fail on a
+missing hardware encoder. H.264 would cut bandwidth roughly 5–10x and is the obvious next step
+(`/api/status` already reports frame size and drop counters to measure it).
+
+## Diagnostics
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | returns `ok` when the server is up |
+| `GET /api/displays` | every attached display and which one is selected |
+| `GET /api/status` | live frame count, dropped frames, client count, uptime |
+| `GET /api/assetcheck` | confirms the web client actually loaded |
+| `GET /api/resources` | lists embedded resources |
+| `GET /mjpeg` | plain multipart MJPEG stream, works in any browser |
+| `WS /ws` | the WebSocket stream the app uses |
+
+If `/api/status` shows a rising `frames` count but the phone stays black, capture is fine and the
+problem is the display selection. If `frames` stays at 0, capture failed and stderr will say why.
 
 ---
 
