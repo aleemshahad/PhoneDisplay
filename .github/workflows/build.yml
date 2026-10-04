@@ -1,0 +1,123 @@
+name: build
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Windows server (.exe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish self-contained single file
+        run: >
+          dotnet publish server/PhoneDisplay.Server.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -o artifacts/windows
+
+      - name: Verify executable exists
+        shell: pwsh
+        run: |
+          $exe = "artifacts/windows/PhoneDisplay.Server.exe"
+          if (-not (Test-Path $exe)) { throw "Build did not produce $exe" }
+          "OK: $((Get-Item $exe).Length) bytes"
+
+      - name: Bundle with docs
+        shell: pwsh
+        run: |
+          Copy-Item web artifacts/windows/www -Recurse -Force
+          Copy-Item README.md artifacts/windows/README.md -Force
+          Compress-Archive -Path artifacts/windows/* -DestinationPath PhoneDisplay-Windows-x64.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PhoneDisplay-Windows-x64
+          path: PhoneDisplay-Windows-x64.zip
+          if-no-files-found: error
+
+  android:
+    name: Android player (.apk)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Gradle 8.9
+        shell: pwsh
+        run: |
+          $zip = "$env:RUNNER_TEMP/gradle.zip"
+          Invoke-WebRequest -Uri "https://services.gradle.org/distributions/gradle-8.9-bin.zip" -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath "$env:RUNNER_TEMP/gradle"
+          $bin = "$env:RUNNER_TEMP/gradle/gradle-8.9/bin"
+          if ($bin) { Add-Content -Path $env:GITHUB_PATH -Value $bin }
+          & "$bin/gradle.bat" --version
+
+      - name: Copy web client into app assets
+        shell: pwsh
+        run: |
+          $target = "android/app/src/main/assets/www"
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          Copy-Item "web/*" $target -Force
+
+      - name: Build release APK
+        shell: pwsh
+        run: |
+          $gradle = "$env:RUNNER_TEMP/gradle/gradle-8.9/bin/gradle.bat"
+          & $gradle --no-daemon --stacktrace -p android assembleRelease
+          if ($LASTEXITCODE -ne 0) { throw "Gradle build failed" }
+
+      - name: Verify APK exists
+        shell: pwsh
+        run: |
+          $apk = Get-ChildItem "android/app/build/outputs/apk/release/*.apk" | Select-Object -First 1
+          if (-not $apk) { throw "Build did not produce an APK" }
+          "OK: $($apk.Name) $($apk.Length) bytes"
+          Copy-Item $apk.FullName "artifacts/PhoneDisplay.apk" -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PhoneDisplay-Android
+          path: artifacts/PhoneDisplay.apk
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    needs: [windows, android]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Collect release files
+        run: |
+          mkdir -p release
+          find dist -type f \( -name '*.zip' -o -name '*.apk' \) -exec cp {} release/ \;
+          ls -la release
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true

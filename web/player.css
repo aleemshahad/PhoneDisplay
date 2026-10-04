@@ -1,0 +1,83 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  color: #eee;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+#view {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #000;
+}
+
+#status {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: 0;
+  right: 0;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  background: rgba(0, 0, 0, 0.55);
+  transition: opacity 0.25s ease;
+  z-index: 10;
+}
+
+#dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e5484d;
+  flex: 0 0 auto;
+}
+
+#dot.live {
+  background: #30a46c;
+}
+
+#text {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#fps {
+  color: #9a9a9a;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+#hint {
+  position: fixed;
+  bottom: env(safe-area-inset-bottom, 0px);
+  left: 0;
+  right: 0;
+  text-align: center;
+  padding: 8px;
+  font-size: 11px;
+  color: #8a8a8a;
+  background: rgba(0, 0, 0, 0.45);
+  transition: opacity 0.25s ease;
+  z-index: 10;
+}
+
+body.clean #status,
+body.clean #hint {
+  opacity: 0;
+}
