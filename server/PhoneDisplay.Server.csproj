@@ -8,6 +8,7 @@
     <AssemblyName>PhoneDisplay.Server</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>

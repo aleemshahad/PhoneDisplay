@@ -284,7 +284,8 @@ static async Task RunCaptureLoopAsync(Capture capture, Broadcaster broadcaster, 
     }
     catch (Exception ex)
     {
-        Console.Error.WriteLine("Capture loop stopped: " + ex.Message);
+        Console.Error.WriteLine("Capture loop stopped:");
+        Console.Error.WriteLine(ex.ToString());
     }
 }
 

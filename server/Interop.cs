@@ -90,7 +90,7 @@ internal static class Interop
     [DllImport("user32.dll")]
     public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport("gdi32.dll", SetLastError = true)]
     public static extern bool BitBlt(IntPtr hdcDest, int xDest, int yDest, int w, int h, IntPtr hdcSource, int xSrc, int ySrc, uint rop);
 
     [DllImport("gdi32.dll")]
