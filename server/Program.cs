@@ -81,6 +81,19 @@ app.MapGet("/", () => Results.Content(ReadAsset("www/index.html"), "text/html; c
 app.MapGet("/player.css", () => Results.Content(ReadAsset("www/player.css"), "text/css; charset=utf-8"));
 app.MapGet("/player.js", () => Results.Content(ReadAsset("www/player.js"), "application/javascript; charset=utf-8"));
 app.MapGet("/health", () => Results.Text("ok"));
+app.MapGet("/api/resources", () => Results.Json(typeof(ServerOptions).Assembly.GetManifestResourceNames()));
+app.MapGet("/api/assetcheck", () =>
+{
+    var index = ReadAsset("www/index.html");
+    var js = ReadAsset("www/player.js");
+    return Results.Json(new
+    {
+        baseDirectory = AppContext.BaseDirectory,
+        indexLength = index.Length,
+        playerJsLength = js.Length,
+        indexOk = index.Contains("<canvas")
+    });
+});
 
 app.MapGet("/api/displays", () => Results.Json(displays.Select(d => new
 {
@@ -297,15 +310,26 @@ static async Task RunCaptureLoopAsync(Capture capture, Broadcaster broadcaster, 
 static string ReadAsset(string name)
 {
     var assembly = typeof(ServerOptions).Assembly;
-    using var stream = assembly.GetManifestResourceStream("PhoneDisplay.Server." + name);
+    var full = "PhoneDisplay.Server." + name;
 
-    if (stream is null)
+    using (var stream = assembly.GetManifestResourceStream(full))
     {
-        return string.Empty;
+        if (stream is not null)
+        {
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }
     }
 
-    using var reader = new StreamReader(stream);
-    return reader.ReadToEnd();
+    var onDisk = Path.Combine(AppContext.BaseDirectory, name.Replace('/', Path.DirectorySeparatorChar));
+
+    if (File.Exists(onDisk))
+    {
+        return File.ReadAllText(onDisk);
+    }
+
+    Console.Error.WriteLine("asset not found: " + full);
+    return string.Empty;
 }
 
 static IEnumerable<string> BuildUrls(int port)
